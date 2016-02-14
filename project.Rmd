@@ -1,0 +1,134 @@
+---
+title: "PracticalMachineLearningProject"
+author: "Danilo Lofaro"
+date: "14 febbraio 2016"
+output:  
+      html_document:  
+        keep_md: true  
+--- 
+
+### The Project
+
+#### Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+
+#### Data
+
+The goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of the 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: [linked phrase](http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+The training data for this project are available at [linked phrase](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv) 
+
+The test data are available at [linked phrase](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)
+
+The data for this project come from this source: [linked phrase](http://groupware.les.inf.puc-rio.br/har)
+
+
+#### Goal
+
+Goal of the project is to predict the manner in which the participants did the exercise. This is the "classe" variable in the training set, using any of the other variables to predict with. 
+A report describing how the model is built, how cross validation was used, what is the expected out of sample error. The prediction model will be used to predict 20 different test cases. 
+
+#### Loading, Getting and Pre-processing data
+
+```{r download,cache=TRUE}
+set.seed(12345)
+
+trainUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+training <- read.csv(url(trainUrl), na.strings=c("NA","#DIV/0!",""))
+testing <- read.csv(url(testUrl), na.strings=c("NA","#DIV/0!",""))
+
+dim(training)
+dim(testing)
+```
+
+<br>
+Backup of original data
+```{r backup}
+training_original <- training
+testing_original <- testing
+```
+
+<br>
+Remove 1st (`ID`) variable 
+```{r removeID}
+training <- training[,-1]
+```
+
+<br>
+Remove NearZeroVariance variables
+```{r nearZeroVar, cache=TRUE}
+library(caret)
+
+nzv <- nearZeroVar(training, saveMetrics=TRUE)
+training <- training[,nzv$nzv==FALSE]
+```
+
+<br>
+Remove variables with > 60% `NA` values 
+```{r removeNA}
+training <- training[,colSums(is.na(training))<.4*NROW(training)]
+```
+
+<br>
+Partioning the training set into training and test datasets
+```{r train_test}
+inTrain <- createDataPartition(training$classe, p=0.6, list=FALSE)
+
+myTraining <- training[inTrain, ]
+myTesting <- training[-inTrain, ]
+
+dim(myTraining)
+dim(myTesting)
+```
+
+#### Prediction Model
+
+Using the dataset `myTraining` and Linear SVM we create the prediction model. Since the time needed to run the model we will test a single prediction model.
+
+```{r prediction,cache=TRUE}
+library(parallel)
+library(doParallel)
+
+cl <- makeCluster(detectCores() - 1)
+registerDoParallel(cl)
+
+reg_Control <- trainControl("cv", number = 5, verboseIter = TRUE)
+    
+fit <- train(myTraining$classe ~ .,data = myTraining, method="svmLinear2", tuneLength = 3,preProc=c('scale','center'),trControl = reg_Control)
+    
+stopCluster(cl)
+```
+
+Accuracy Plot
+```{r plot_fit}
+plot(fit)
+```
+
+Confusion Matrix on `myTraining` set. 
+```{r confTest,cache=TRUE}
+predFit<- predict(fit, myTraining)
+confusionMatrix(predFit, myTraining$classe)
+```
+
+<br> 
+Accuracy on `myTraining` set is aroung 90%. Check the performance on `myTesting`
+```{r test,cache=TRUE}
+predTest<- predict(fit, myTesting)
+confusionMatrix(predTest, myTesting$classe)
+```
+
+<br>
+Accuracy on `myTesting` remain aroung 90%. Now let's check the prediction on the 20 test cases 
+```{r cases}
+predCases <- predict(fit, testing)
+predCases
+```
+
+<br>
+#### Conclusions
+
+The model predicted the 20 test cases with 100% accuracy. All 20 points were awarded after submitting the 20 test files.
